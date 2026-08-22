@@ -713,6 +713,10 @@ footer{border-top:1px solid var(--line-soft);padding:26px 0;margin-top:44px;}
 .ai-gen-explain{margin-top:14px;padding:13px 15px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line-soft);font-size:13.3px;color:var(--text-dim);display:none;}
 .ai-gen-explain.show{display:block;animation:fadeIn var(--t-med) var(--ease) both;}
 .ai-gen-explain b{color:var(--text);display:block;margin-bottom:5px;font-size:11.5px;letter-spacing:0.02em;text-transform:uppercase;}
+.ai-flash-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:18px 20px;}
+.ai-flash-card .q-tag{margin-bottom:10px;display:inline-block;}
+.ai-flash-front{font-family:var(--disp);font-size:14.5px;font-weight:600;line-height:1.5;margin-bottom:10px;}
+.ai-flash-back{font-size:13.3px;color:var(--text-dim);line-height:1.6;padding-top:10px;border-top:1px solid var(--line-soft);}
 .ai-inline-explain{margin-top:10px;padding:13px 15px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent-line);font-size:13.3px;color:var(--text);display:none;}
 .ai-inline-explain.show{display:block;animation:fadeIn var(--t-med) var(--ease) both;}
 .ai-inline-explain b{color:var(--accent);display:block;margin-bottom:5px;font-size:11px;letter-spacing:0.02em;text-transform:uppercase;}
@@ -1339,6 +1343,7 @@ footer{border-top:1px solid var(--line-soft);padding:26px 0;margin-top:44px;}
   <div class="seg" id="aiTabs" style="display:inline-flex;margin-bottom:22px;">
     <button data-v="chat" class="active">💬 Tutor</button>
     <button data-v="gen">✦ Gerar questões</button>
+    <button data-v="flash">🧠 Gerar flashcards</button>
     <button data-v="settings">⚙ Preferências</button>
   </div>
 
@@ -1380,6 +1385,31 @@ footer{border-top:1px solid var(--line-soft);padding:26px 0;margin-top:44px;}
     </div>
     <p class="hint-text" id="aiGenHint" style="margin-top:14px;">As questões geradas são inéditas, criadas pela IA no estilo da prova teórica ANAC, e não substituem o banco oficial de questões.</p>
     <div id="aiGenResults" style="margin-top:20px;display:flex;flex-direction:column;gap:14px;"></div>
+  </div>
+
+  <!-- --- GERAR FLASHCARDS --- -->
+  <div class="ai-panel" id="aiPanel-flash">
+    <div class="config-panel" style="margin-top:0;">
+      <div class="config-item">
+        <div class="config-label">Matéria</div>
+        <select id="aiFlashGenSubject" class="ai-select"></select>
+      </div>
+      <div class="config-item">
+        <div class="config-label">Quantidade</div>
+        <div class="seg" id="aiFlashGenCount">
+          <button data-v="5" class="active">5</button>
+          <button data-v="10">10</button>
+          <button data-v="15">15</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnAiFlashGenerate" style="margin-left:auto;">🧠 Gerar flashcards</button>
+    </div>
+    <p class="hint-text" id="aiFlashGenHint" style="margin-top:14px;">Os flashcards gerados são inéditos, criados pela IA a partir do conteúdo cobrado na prova teórica ANAC. Revise antes de adicionar ao seu deck de estudo.</p>
+    <div id="aiFlashGenResults" style="margin-top:20px;display:flex;flex-direction:column;gap:14px;"></div>
+    <div id="aiFlashGenSaveRow" style="display:none;margin-top:18px;align-items:center;gap:14px;">
+      <button class="btn btn-primary" id="btnAiFlashSaveAll">＋ Adicionar todos ao deck de flashcards</button>
+      <span class="hint-text" id="aiFlashSavedHint"></span>
+    </div>
   </div>
 
   <!-- --- PREFERÊNCIAS --- -->
@@ -2790,7 +2820,7 @@ function renderMaterials(){
             <div class="mat-pdf-title">${content.pdf.title}</div>
             <p class="mat-pdf-desc">${content.pdf.desc}</p>
             <div class="mat-pdf-frame-wrap">
-              <iframe class="mat-pdf-frame" src="${content.pdf.url}" loading="lazy" title="${content.pdf.title}"></iframe>
+              <iframe class="mat-pdf-frame" data-src="https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(content.pdf.url)}" loading="lazy" title="${content.pdf.title}"></iframe>
             </div>
             <div class="mat-links">
               <a class="mat-link" href="${content.pdf.url}" target="_blank" rel="noopener">Abrir PDF em nova aba ↗</a>
@@ -2801,7 +2831,16 @@ function renderMaterials(){
         </div>
       </div>
     `;
-    card.querySelector(".mat-head").onclick = ()=> card.classList.toggle("open");
+    card.querySelector(".mat-head").onclick = ()=>{
+      const opening = !card.classList.contains("open");
+      card.classList.toggle("open");
+      if(opening){
+        const frame = card.querySelector(".mat-pdf-frame");
+        if(frame && !frame.getAttribute("src") && frame.dataset.src){
+          frame.src = frame.dataset.src;
+        }
+      }
+    };
     grid.appendChild(card);
   });
 }
@@ -2900,14 +2939,23 @@ function renderVideos(){
             <div class="mat-pdf-title">${content.video.title}</div>
             <p class="mat-pdf-desc">${content.video.desc}</p>
             <div class="mat-pdf-frame-wrap">
-              <iframe class="mat-pdf-frame" src="${embedSrc}" loading="lazy" title="${content.video.title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+              <iframe class="mat-pdf-frame" data-src="${embedSrc}" loading="lazy" title="${content.video.title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
             </div>
           </div>` : ``}
           <div class="mat-links">${content.links.map(l=>`<a class="mat-link" href="${l.url}" target="_blank" rel="noopener">${l.label} ↗</a>`).join("")}</div>
         </div>
       </div>
     `;
-    card.querySelector(".mat-head").onclick = ()=> card.classList.toggle("open");
+    card.querySelector(".mat-head").onclick = ()=>{
+      const opening = !card.classList.contains("open");
+      card.classList.toggle("open");
+      if(opening){
+        const frame = card.querySelector(".mat-pdf-frame");
+        if(frame && !frame.getAttribute("src") && frame.dataset.src){
+          frame.src = frame.dataset.src;
+        }
+      }
+    };
     grid.appendChild(card);
   });
 }
@@ -3344,6 +3392,7 @@ const FLASHCARDS = {
 };
 
 const FLASH_STATUS_KEY = "prancheta_flash_status_v1";
+const AI_FLASHCARDS_KEY = "prancheta_ai_flashcards_v1";
 let flashState = { deckKey:"all", cards:[], index:0, flipped:false };
 
 function loadFlashStatus(){
@@ -3352,12 +3401,22 @@ function loadFlashStatus(){
 function saveFlashStatus(obj){ localStorage.setItem(FLASH_STATUS_KEY, JSON.stringify(obj)); }
 function flashCardId(subjectKey, idx){ return subjectKey+"_"+idx; }
 
+function getAiFlashcards(){
+  try{ return JSON.parse(localStorage.getItem(AI_FLASHCARDS_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveAiFlashcards(obj){ localStorage.setItem(AI_FLASHCARDS_KEY, JSON.stringify(obj)); }
+function allFlashcardsForSubject(sk){
+  const base = FLASHCARDS[sk] || [];
+  const ai = getAiFlashcards()[sk] || [];
+  return base.concat(ai);
+}
+
 function buildFlashDeck(course, deckKey){
   const subjKeys = deckKey==="all" ? subjectsForCourse(course) : [deckKey];
   let cards = [];
   subjKeys.forEach(sk=>{
-    if(!FLASHCARDS[sk]) return;
-    FLASHCARDS[sk].forEach((c,i)=> cards.push({subject:sk, id:flashCardId(sk,i), front:c.front, back:c.back}));
+    const list = allFlashcardsForSubject(sk);
+    list.forEach((c,i)=> cards.push({subject:sk, id:flashCardId(sk,i), front:c.front, back:c.back}));
   });
   return cards;
 }
@@ -3376,7 +3435,7 @@ function initFlashScreen(){
   chipsWrap.appendChild(allChip);
 
   subjectsForCourse(course).forEach(key=>{
-    if(!FLASHCARDS[key]) return;
+    if(allFlashcardsForSubject(key).length===0) return;
     const s = SUBJECTS[key];
     const chip = document.createElement("div");
     chip.className = "flash-chip" + (flashState.deckKey===key ? " active":"");
@@ -3553,6 +3612,17 @@ function initAIScreen(){
       opt.value = key;
       opt.textContent = `${s.icon} ${s.name}`;
       subjSel.appendChild(opt);
+    });
+  }
+
+  const flashSubjSel = document.getElementById("aiFlashGenSubject");
+  if(flashSubjSel.children.length===0){
+    subjectsForCourse(course).forEach(key=>{
+      const s = SUBJECTS[key];
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = `${s.icon} ${s.name}`;
+      flashSubjSel.appendChild(opt);
     });
   }
 
@@ -3749,6 +3819,88 @@ function renderAiGeneratedQuestions(questions, subject){
     wrap.appendChild(card);
   });
 }
+
+/* ---- gerar flashcards com IA ---- */
+document.getElementById("aiFlashGenCount").addEventListener("click", (e)=>{
+  const btn = e.target.closest("button[data-v]");
+  if(!btn) return;
+  document.querySelectorAll("#aiFlashGenCount button").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+});
+
+let lastGeneratedFlashcards = [];
+let lastGeneratedFlashcardsSubject = null;
+
+document.getElementById("btnAiFlashGenerate").onclick = async ()=>{
+  const btn = document.getElementById("btnAiFlashGenerate");
+  const subjKey = document.getElementById("aiFlashGenSubject").value;
+  const s = SUBJECTS[subjKey];
+  const count = document.querySelector("#aiFlashGenCount button.active").dataset.v;
+  const resultsWrap = document.getElementById("aiFlashGenResults");
+  document.getElementById("aiFlashGenSaveRow").style.display = "none";
+  document.getElementById("aiFlashSavedHint").textContent = "";
+
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.innerHTML = `<span class="ai-spinner"></span> gerando...`;
+  resultsWrap.innerHTML = `<p class="hint-text">Gerando ${count} flashcards inéditos de ${s.name}...</p>`;
+
+  const prompt = `Gere ${count} flashcards de estudo inéditos sobre o tema "${s.name}", para revisão da prova teórica ANAC de Piloto Privado/Comercial. Cada flashcard deve ter uma frente curta (um termo, sigla ou pergunta objetiva) e um verso com a explicação completa, precisa e didática, no nível cobrado na prova real.
+
+Responda APENAS com um JSON válido (sem texto antes ou depois, sem markdown), no formato de um array:
+[
+  {"front":"termo, sigla ou pergunta curta","back":"explicação completa do conceito"}
+]`;
+
+  try{
+    const raw = await aiCall([{role:"user", content:prompt}], "Você gera flashcards de estudo para a prova ANAC em formato JSON estrito, sem nenhum texto fora do JSON.");
+    const cards = parseAiJsonBlock(raw).filter(c=>c && c.front && c.back);
+    lastGeneratedFlashcards = cards;
+    lastGeneratedFlashcardsSubject = subjKey;
+    renderAiGeneratedFlashcards(cards, s);
+    if(cards.length){
+      document.getElementById("aiFlashGenSaveRow").style.display = "flex";
+    }
+  }catch(err){
+    resultsWrap.innerHTML = `<div class="ai-msg error" style="display:block;"><div class="ai-msg-bubble" style="max-width:100%;">${escapeHtml(err.message || "Não foi possível gerar os flashcards. Tente novamente.")}</div></div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+};
+
+function renderAiGeneratedFlashcards(cards, subject){
+  const wrap = document.getElementById("aiFlashGenResults");
+  wrap.innerHTML = "";
+  cards.forEach(item=>{
+    const card = document.createElement("div");
+    card.className = "ai-flash-card";
+    const tag = document.createElement("span");
+    tag.className = "q-tag";
+    tag.textContent = `${subject.icon} ${subject.name} · gerado por IA`;
+    const front = document.createElement("div");
+    front.className = "ai-flash-front";
+    front.textContent = item.front;
+    const back = document.createElement("div");
+    back.className = "ai-flash-back";
+    back.textContent = item.back;
+    card.appendChild(tag);
+    card.appendChild(front);
+    card.appendChild(back);
+    wrap.appendChild(card);
+  });
+}
+
+document.getElementById("btnAiFlashSaveAll").onclick = ()=>{
+  if(!lastGeneratedFlashcards.length || !lastGeneratedFlashcardsSubject) return;
+  const store = getAiFlashcards();
+  const subjKey = lastGeneratedFlashcardsSubject;
+  store[subjKey] = (store[subjKey] || []).concat(lastGeneratedFlashcards.map(c=>({front:c.front, back:c.back})));
+  saveAiFlashcards(store);
+  document.getElementById("aiFlashSavedHint").textContent = `${lastGeneratedFlashcards.length} flashcards adicionados ao deck de ${SUBJECTS[subjKey].name}. Confira na aba Flashcards.`;
+  document.getElementById("btnAiFlashSaveAll").disabled = true;
+  showToast("Flashcards adicionados ao seu deck de revisão ✓");
+};
 
 /* ---------- boot ---------- */
 refreshUserChip();
