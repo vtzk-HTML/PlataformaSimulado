@@ -1,0 +1,72 @@
+// api/register.js
+// Cria um novo usuário: recebe { name, email, password, course, canac }.
+// Já retorna um token de sessão (auto-login), espelhando o comportamento do
+// fluxo antigo em localStorage, que logava o usuário na hora após o cadastro.
+
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const sql = require("../db");
+
+const SESSION_DURATION_HOURS = 24 * 7; // 7 dias
+
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Método não permitido." });
+    return;
+  }
+
+  const { name, email, password, course, canac } = req.body || {};
+
+  if (!name || !email || !password || !canac) {
+    res.status(400).json({ error: "Preencha todos os campos, incluindo o código CANAC." });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: "A senha deve ter pelo menos 8 caracteres." });
+    return;
+  }
+
+  const chosenCourse = course === "PC" ? "PC" : "PP";
+
+  try {
+    const existing = await sql`SELECT id FROM users WHERE email = ${email}`;
+    if (existing.length > 0) {
+      res.status(409).json({ error: "Já existe uma conta com este e-mail. Faça login." });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const inserted = await sql`
+      INSERT INTO users (name, email, password_hash, course, canac)
+      VALUES (${name}, ${email}, ${passwordHash}, ${chosenCourse}, ${canac})
+      RETURNING id, name, email, course, canac, created_at
+    `;
+    const user = inserted[0];
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 3600 * 1000).toISOString();
+    await sql`INSERT INTO sessions (user_id, token, expires_at) VALUES (${user.id}, ${token}, ${expiresAt})`;
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        course: user.course,
+        canac: user.canac,
+        createdAt: user.created_at,
+        history: [],
+      },
+    });
+  } catch (err) {
+    // Corrida entre duas requisições concorrentes tentando registrar o mesmo e-mail.
+    if (err && err.code === "23505") {
+      res.status(409).json({ error: "Já existe uma conta com este e-mail. Faça login." });
+      return;
+    }
+    console.error("Erro em /api/register:", err);
+    res.status(500).json({ error: "Erro interno ao criar usuário." });
+  }
+};
